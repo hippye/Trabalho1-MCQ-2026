@@ -1,0 +1,91 @@
+import bpy
+import mathutils
+import math
+
+# Limpar cena atual
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete()
+
+# --- SELETOR DE CASOS ---
+# Mude para 1, 2 ou 3 conforme exigido no trabalho
+CASO_ATUAL = 1 
+
+# --- PARÂMETROS ADIMENSIONALIZADOS BASE ---
+G = 1.0
+dt = 0.05 # Passo de integração
+total_frames = 1500
+
+# Variáveis de decaimento de massa (iniciais)
+tau1 = float('inf')
+tau2 = float('inf')
+
+if CASO_ATUAL == 1:
+    # CASO 1: m1 = m2
+    m1_0, m2_0 = 10.0, 10.0
+    pos1, pos2 = mathutils.Vector((-5.0, 0, 0)), mathutils.Vector((5.0, 0, 0))
+    vel1, vel2 = mathutils.Vector((0, -0.7, 0)), mathutils.Vector((0, 0.7, 0))
+    raio1, raio2 = 1.0, 1.0
+
+elif CASO_ATUAL == 2:
+    # CASO 2: m1 = 333000 * m2
+    m1_0, m2_0 = 333000.0, 1.0
+    pos1, pos2 = mathutils.Vector((0.0, 0, 0)), mathutils.Vector((100.0, 0, 0))
+    # Velocidade orbital circular: v = sqrt(G*M/r)
+    v_orb = math.sqrt(G * m1_0 / pos2.length)
+    vel1, vel2 = mathutils.Vector((0, 0, 0)), mathutils.Vector((0, v_orb, 0))
+    raio1, raio2 = 5.0, 0.5
+
+elif CASO_ATUAL == 3:
+    # CASO 3: Perda de Massa Variável
+    m1_0, m2_0 = 333000.0, 1.0
+    pos1, pos2 = mathutils.Vector((0.0, 0, 0)), mathutils.Vector((100.0, 0, 0))
+    v_orb = math.sqrt(G * m1_0 / pos2.length)
+    vel1, vel2 = mathutils.Vector((0, 0, 0)), mathutils.Vector((0, v_orb, 0))
+    raio1, raio2 = 5.0, 0.5
+    # tau1 definido para perda de massa rápida; tau2 infinito (massa do corpo 2 constante)
+    tau1 = 20.0 
+    tau2 = float('inf')
+
+# --- CRIAÇÃO DOS OBJETOS ---
+bpy.ops.mesh.primitive_uv_sphere_add(radius=raio1)
+corpo1 = bpy.context.object
+corpo1.name = "Corpo_1"
+
+bpy.ops.mesh.primitive_uv_sphere_add(radius=raio2)
+corpo2 = bpy.context.object
+corpo2.name = "Corpo_2"
+
+# --- LOOP DE INTEGRAÇÃO FÍSICA ---
+tempo_simulacao = 0.0
+
+for frame in range(1, total_frames + 1):
+    
+    # Equação de massa variável (Item 7)
+    m1 = m1_0 * math.exp(-tempo_simulacao / tau1)
+    m2 = m2_0 * math.exp(-tempo_simulacao / tau2)
+
+    # Inserir Keyframes
+    corpo1.location = pos1
+    corpo1.keyframe_insert(data_path="location", frame=frame)
+    
+    corpo2.location = pos2
+    corpo2.keyframe_insert(data_path="location", frame=frame)
+    
+    # Vetor Distância e Força
+    r_vec = pos1 - pos2
+    r_mag = r_vec.length
+    
+    if r_mag > (raio1 + raio2): # Evitar singularidade e divisão por zero
+        f_mag = G * (m1 * m2) / (r_mag**2)
+        f_vec = r_vec.normalized() * f_mag
+        
+        # Aceleração (dv = (F/m) * dt)
+        vel1 += (f_vec / m1) * dt * -1 
+        vel2 += (f_vec / m2) * dt     
+    
+    # Atualização de Posição
+    pos1 += vel1 * dt
+    pos2 += vel2 * dt
+    tempo_simulacao += dt
+
+bpy.context.scene.frame_end = total_frames
